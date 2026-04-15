@@ -1454,7 +1454,18 @@ namespace hdt
 							if (isValidNiObject(bone)) {
 								boneName = bone->name;
 							} else if (bone && reinterpret_cast<uintptr_t>(bone) <= kCanonicalUserSpaceMax) {
-								boneName = reinterpret_cast<const char*>(bone);
+								const char* raw = reinterpret_cast<const char*>(bone);
+								bool looksLikeString = true;
+								for (int ci = 0; ci < 64; ++ci) {
+									char ch = raw[ci];
+									if (ch == '\0') break;
+									if (ch < 0x20 || ch > 0x7E) { looksLikeString = false; break; }
+								}
+								if (looksLikeString && raw[0] != '\0') {
+									boneName = raw;
+								} else {
+									logger::warn("Bone[{}]: pointer {:p} is not a valid NiObject or readable string, skipping.", boneIdx, static_cast<const void*>(bone));
+								}
 							}
 						}
 					}
@@ -1545,7 +1556,12 @@ namespace hdt
 			}
 
 			if (!boneNode) {
-				logger::error("Bone {} not found after skeleton merge, geometry cannot be fully skinned.", boneName);
+				if (!boneName.empty())
+					logger::error("Bone {} not found after skeleton merge, geometry cannot be fully skinned.", boneName);
+				else
+					logger::error("Bone[{}]: no name could be resolved, geometry cannot be fully skinned.", boneIdx);
+				geometry->GetGeometryRuntimeData().skinInstance->bones[boneIdx] = headNode;
+				geometry->GetGeometryRuntimeData().skinInstance->boneWorldTransforms[boneIdx] = &headNode->world;
 				continue;
 			}
 
